@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>My Ledger</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --paper: #EFEAE0;
+    --paper-dark: #E3DCCC;
+    --ink: #1F2A33;
+    --ink-soft: #5B6570;
+    --teal: #4B766B;
+    --rust: #B14B36;
+    --gold: #C79A3D;
+    --muted: #8A8175;
+    --line: #C9BFA9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 40px; }
+  .serif { font-family: Georgia, "Times New Roman", serif; }
+  .mono { font-family: "SF Mono", "Courier New", monospace; font-variant-numeric: tabular-nums; }
+
+  .stub {
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 12px 12px 0 0;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .stub .title { display: flex; align-items: center; gap: 8px; font-size: 18px; letter-spacing: 0.3px; }
+  .stub .month { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.7; }
+  .perf {
+    height: 0;
+    border-top: 2px dashed var(--line);
+    background: var(--paper-dark);
+  }
+  .summary {
+    background: var(--paper-dark);
+    border-radius: 0 0 12px 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 4px; }
+  .salary-val { font-size: 20px; font-weight: 600; color: var(--gold); background: none; border: none; border-bottom: 1px solid transparent; padding: 0; cursor: pointer; text-align: left; }
+  .salary-val:hover { border-bottom-color: var(--gold); }
+  #salaryInput {
+    font-size: 20px; font-weight: 600; color: var(--gold); background: transparent;
+    border: none; border-bottom: 1px solid var(--gold); outline: none; width: 100%;
+    font-family: "SF Mono", "Courier New", monospace;
+  }
+  .spent-val { font-size: 20px; font-weight: 600; color: var(--rust); }
+  .remain-val { font-size: 20px; font-weight: 600; }
+
+  .bar-track { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 18px; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .bar-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .card h3 { margin: 0 0 12px; font-size: 16px; font-weight: 400; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (min-width: 480px) { .form-grid { grid-template-columns: repeat(4, 1fr); } }
+  .form-grid input, .form-grid select {
+    padding: 9px 10px; font-size: 14px; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink); background: #fff; width: 100%; font-family: inherit;
+  }
+  .form-grid input[type=number] { font-family: "SF Mono", "Courier New", monospace; }
+  .add-btn {
+    margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--ink); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 14px; cursor: pointer; width: 100%;
+  }
+  @media (min-width: 480px) { .add-btn { width: auto; } }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (min-width: 640px) { .charts-grid { grid-template-columns: 1fr 1fr; } }
+  .chart-box { position: relative; height: 200px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .entry-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--line);
+  }
+  .entry-row:last-child { border-bottom: none; }
+  .entry-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .entry-note { font-size: 14px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-sub { font-size: 12px; color: var(--muted); }
+  .entry-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .entry-amt { font-family: "SF Mono", "Courier New", monospace; font-size: 14px; color: var(--rust); }
+  .del-btn { background: none; border: none; cursor: pointer; opacity: 0.4; font-size: 15px; color: var(--ink-soft); }
+  .del-btn:hover { opacity: 1; }
+  .empty { text-align: center; padding: 32px 0; color: var(--muted); font-size: 14px; }
+
+  .footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 12px; }
+  .footer .status-err { color: var(--rust); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="errorBanner" style="display:none; background:#B14B36; color:#fff; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:16px;"></div>
+
+  <div class="stub">
+    <div class="title serif">💼 My Ledger</div>
+    <div class="month" id="monthLabel"></div>
+  </div>
+  <div class="perf"></div>
+
+  <div class="summary">
+    <div class="summary-grid">
+      <div>
+        <div class="label">Salary</div>
+        <button class="salary-val mono" id="salaryDisplay"></button>
+        <input id="salaryInput" type="number" style="display:none" inputmode="decimal" />
+      </div>
+      <div>
+        <div class="label">Spent</div>
+        <div class="spent-val mono" id="spentDisplay"></div>
+      </div>
+      <div>
+        <div class="label">Remaining</div>
+        <div class="remain-val mono" id="remainDisplay"></div>
+      </div>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+    <div class="bar-meta">
+      <span id="pctLabel"></span>
+      <span id="dailyLabel"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="serif">Add an entry</h3>
+    <div class="form-grid">
+      <input type="date" id="fDate" />
+      <select id="fCategory"></select>
+      <input type="number" id="fAmount" placeholder="Amount" inputmode="decimal" />
+      <input type="text" id="fNote" placeholder="Note (optional)" />
+    </div>
+    <button class="add-btn" id="addBtn">+ Add entry</button>
+  </div>
+
+  <div class="charts-grid" id="chartsGrid" style="display:none">
+    <div class="card">
+      <h3 class="serif">By category</h3>
+      <div class="chart-box"><canvas id="pieChart"></canvas></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="card">
+      <h3 class="serif">Daily spend</h3>
+      <div class="chart-box"><canvas id="barChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="serif">📋 Entries</h3>
+    <div id="entryList"></div>
+  </div>
+
+  <div class="card">
+    <h3 class="serif">Backup</h3>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="add-btn" id="exportBtn" style="background:var(--teal)">⬇ Export backup</button>
+      <button class="add-btn" id="importBtn" style="background:var(--muted)">⬆ Restore backup</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none" />
+    </div>
+    <div style="font-size:12px; color:var(--muted); margin-top:8px;">
+      Export saves a .json file of your salary and entries. Restore replaces current data with a backup file.
+    </div>
+  </div>
+
+  <div class="footer">
+    Tap the salary figure to edit it · <span id="statusLabel">stored on this device</span>
+  </div>
+
+</div>
+
+<script>
+window.onerror = function (msg, src, line) {
+  const banner = document.getElementById('errorBanner');
+  if (banner) {
+    banner.style.display = 'block';
+    banner.textContent = 'Something went wrong: ' + msg + ' (line ' + line + ')';
+  }
+  return false;
+};
+
+const PALETTE = {
+  ink: '#1F2A33', inkSoft: '#5B6570', teal: '#4B766B', rust: '#B14B36',
+  gold: '#C79A3D', muted: '#8A8175', line: '#C9BFA9',
+};
+const CATEGORIES = [
+  { name: 'Rent', color: '#4B766B' },
+  { name: 'Food', color: '#C79A3D' },
+  { name: 'Travel', color: '#B14B36' },
+  { name: 'Utilities', color: '#6B7A8F' },
+  { name: 'Shopping', color: '#9C6644' },
+  { name: 'Health', color: '#7A9E7E' },
+  { name: 'Entertainment', color: '#A45C7C' },
+  { name: 'Other', color: '#8A8175' },
+];
+const STORAGE_KEY = 'ledger:data:v1';
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const formatINR = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+const formatDate = (iso) => {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+};
+
+let state = { salary: 45000, expenses: [] };
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.salary === 'number') state.salary = parsed.salary;
+      if (Array.isArray(parsed.expenses)) state.expenses = parsed.expenses;
+    }
+    setStatus('stored on this device');
+  } catch (err) {
+    setStatus("couldn't read saved data", true);
+  }
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    setStatus('stored on this device');
+  } catch (err) {
+    setStatus("couldn't save — storage full or unavailable", true);
+  }
+}
+
+function setStatus(text, isError) {
+  const el = document.getElementById('statusLabel');
+  el.textContent = text;
+  el.className = isError ? 'status-err' : '';
+}
+
+let pieChart, barChart;
+
+function render() {
+  const now = new Date();
+  document.getElementById('monthLabel').textContent =
+    now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  const totalSpent = state.expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const remaining = state.salary - totalSpent;
+  const percentUsed = state.salary > 0 ? Math.min(100, (totalSpent / state.salary) * 100) : 0;
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1);
+  const dailyAllowance = remaining > 0 ? remaining / daysLeft : 0;
+
+  document.getElementById('salaryDisplay').textContent = formatINR(state.salary);
+  document.getElementById('spentDisplay').textContent = formatINR(totalSpent);
+  const remainEl = document.getElementById('remainDisplay');
+  remainEl.textContent = formatINR(remaining);
+  remainEl.style.color = remaining >= 0 ? PALETTE.teal : PALETTE.rust;
+
+  const fill = document.getElementById('barFill');
+  fill.style.width = percentUsed + '%';
+  fill.style.background = percentUsed > 90 ? PALETTE.rust : PALETTE.teal;
+  document.getElementById('pctLabel').textContent = percentUsed.toFixed(0) + '% of salary used';
+  document.getElementById('dailyLabel').textContent =
+    '~' + formatINR(dailyAllowance) + '/day left (' + daysLeft + 'd)';
+
+  // category aggregation
+  const catMap = {};
+  state.expenses.forEach((e) => { catMap[e.category] = (catMap[e.category] || 0) + Number(e.amount); });
+  const byCategory = CATEGORIES.map((c) => ({ name: c.name, value: catMap[c.name] || 0, color: c.color }))
+    .filter((c) => c.value > 0);
+
+  // daily aggregation
+  const dayMap = {};
+  state.expenses.forEach((e) => { dayMap[e.date] = (dayMap[e.date] || 0) + Number(e.amount); });
+  const byDay = Object.entries(dayMap).sort((a, b) => (a[0] > b[0] ? 1 : -1)).slice(-14)
+    .map(([date, amount]) => ({ date: formatDate(date), amount }));
+
+  document.getElementById('chartsGrid').style.display = byCategory.length ? 'grid' : 'none';
+
+  if (byCategory.length && typeof Chart !== 'undefined') {
+    try {
+      const pieCtx = document.getElementById('pieChart').getContext('2d');
+      if (pieChart) pieChart.destroy();
+      pieChart = new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+          labels: byCategory.map((c) => c.name),
+          datasets: [{ data: byCategory.map((c) => c.value), backgroundColor: byCategory.map((c) => c.color), borderColor: '#fff', borderWidth: 1 }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => formatINR(ctx.parsed) } } }, cutout: '55%' },
+      });
+      document.getElementById('legend').innerHTML = byCategory.map((c) =>
+        `<div class="legend-item"><span class="dot" style="background:${c.color}"></span>${c.name}</div>`
+      ).join('');
+
+      const barCtx = document.getElementById('barChart').getContext('2d');
+      if (barChart) barChart.destroy();
+      barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: { labels: byDay.map((d) => d.date), datasets: [{ data: byDay.map((d) => d.amount), backgroundColor: PALETTE.rust, borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => formatINR(ctx.parsed.y) } } },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 }, color: PALETTE.inkSoft } },
+            y: { grid: { color: PALETTE.line }, ticks: { font: { size: 11 }, color: PALETTE.inkSoft } },
+          },
+        },
+      });
+    } catch (chartErr) {
+      // Never let a chart failure block the rest of the UI from updating
+      document.getElementById('chartsGrid').style.display = 'none';
+    }
+  } else if (byCategory.length) {
+    // Chart.js didn't load (e.g. CDN blocked) — hide charts, everything else still works
+    document.getElementById('chartsGrid').style.display = 'none';
+  }
+
+  // entries list
+  const sorted = [...state.expenses].sort((a, b) => (a.date < b.date ? 1 : -1) || b.id - a.id);
+  const listEl = document.getElementById('entryList');
+  if (!sorted.length) {
+    listEl.innerHTML = '<div class="empty">Your ledger is empty — add your first entry above.</div>';
+  } else {
+    listEl.innerHTML = sorted.map((e) => {
+      const cat = CATEGORIES.find((c) => c.name === e.category) || {};
+      return `
+        <div class="entry-row">
+          <div class="entry-left">
+            <span class="dot" style="background:${cat.color || '#999'}"></span>
+            <div>
+              <div class="entry-note">${escapeHtml(e.note || e.category)}</div>
+              <div class="entry-sub">${escapeHtml(e.category)} · ${formatDate(e.date)}</div>
+            </div>
+          </div>
+          <div class="entry-right">
+            <span class="entry-amt">−${formatINR(e.amount)}</span>
+            <button class="del-btn" data-id="${e.id}" aria-label="Delete entry">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+    listEl.querySelectorAll('.del-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.getAttribute('data-id'));
+        state.expenses = state.expenses.filter((e) => e.id !== id);
+        save(); render();
+      });
+    });
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// --- init form ---
+document.getElementById('fDate').value = todayISO();
+document.getElementById('fCategory').innerHTML = CATEGORIES.map((c) => `<option value="${c.name}">${c.name}</option>`).join('');
+
+// --- salary edit ---
+const salaryDisplay = document.getElementById('salaryDisplay');
+const salaryInput = document.getElementById('salaryInput');
+salaryDisplay.addEventListener('click', () => {
+  salaryInput.value = state.salary;
+  salaryDisplay.style.display = 'none';
+  salaryInput.style.display = 'block';
+  salaryInput.focus();
+  salaryInput.select();
+});
+function commitSalary() {
+  const v = parseFloat(salaryInput.value);
+  if (v > 0) state.salary = v;
+  salaryInput.style.display = 'none';
+  salaryDisplay.style.display = 'block';
+  save(); render();
+}
+salaryInput.addEventListener('blur', commitSalary);
+salaryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitSalary(); });
+
+// --- add entry ---
+document.getElementById('addBtn').addEventListener('click', () => {
+  const amountField = document.getElementById('fAmount');
+  const amt = parseFloat(amountField.value);
+  if (!amt || amt <= 0) {
+    amountField.style.borderColor = '#B14B36';
+    amountField.placeholder = 'Enter an amount first';
+    amountField.focus();
+    setTimeout(() => { amountField.style.borderColor = ''; amountField.placeholder = 'Amount'; }, 1800);
+    return;
+  }
+  state.expenses.push({
+    id: Date.now(),
+    date: document.getElementById('fDate').value || todayISO(),
+    category: document.getElementById('fCategory').value,
+    amount: amt,
+    note: document.getElementById('fNote').value.trim(),
+  });
+  amountField.value = '';
+  document.getElementById('fNote').value = '';
+  save(); render();
+});
+
+// --- export backup ---
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = todayISO();
+  a.href = url;
+  a.download = `my-ledger-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+// --- import backup ---
+const importFile = document.getElementById('importFile');
+document.getElementById('importBtn').addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (typeof parsed.salary !== 'number' || !Array.isArray(parsed.expenses)) {
+        throw new Error('Invalid backup file');
+      }
+      const ok = confirm('Restore this backup? It will replace your current data on this device.');
+      if (!ok) return;
+      state = { salary: parsed.salary, expenses: parsed.expenses };
+      save(); render();
+    } catch (err) {
+      alert("Couldn't read that file — make sure it's a backup exported from this ledger.");
+    } finally {
+      importFile.value = '';
+    }
+  };
+  reader.readAsText(file);
+});
+
+load();
+render();
+</script>
+</body>
+</html>
